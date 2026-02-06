@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Earthquake Alerts - CAP India</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+        
+        #map {
+            flex: 1;
+            width: 100%;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 80px;
+            right: 10px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 300px;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .info-panel h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+            color: #333;
+        }
+        
+        .alert-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .alert-item:hover {
+            background: #e9ecef;
+            transform: translateX(-3px);
+        }
+        
+        .alert-item .magnitude {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .alert-item .location {
+            font-size: 0.9rem;
+            color: #495057;
+            margin-top: 0.25rem;
+        }
+        
+        .alert-item .depth {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            left: 10px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .legend h4 {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 0.25rem 0;
+            font-size: 0.85rem;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            border: 2px solid white;
+            box-shadow: 0 0 3px rgba(0,0,0,0.3);
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.2);
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🌏 Earthquake Alerts Dashboard</h1>
+        <p>Real-time earthquake monitoring from NDMA CAP</p>
+    </header>
+    
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h3>Latest Earthquakes</h3>
+        <div id="alert-list"></div>
+    </div>
+    
+    <div class="legend">
+        <h4>Magnitude Scale</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff4444;"></div>
+            <span>M ≥ 4.0 (Major)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff9800;"></div>
+            <span>M 3.0 - 3.9 (Moderate)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffd700;"></div>
+            <span>M 2.0 - 2.9 (Minor)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #4caf50;"></div>
+            <span>M &lt; 2.0 (Micro)</span>
+        </div>
+        <h4 style="margin-top: 1rem;">Intensity Zones</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff0000; opacity: 0.4; border-radius: 3px;"></div>
+            <span>&gt; 1.5 (High)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ff6600; opacity: 0.3; border-radius: 3px;"></div>
+            <span>1.0 - 1.5</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffaa00; opacity: 0.25; border-radius: 3px;"></div>
+            <span>0.5 - 1.0</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #ffdd00; opacity: 0.2; border-radius: 3px;"></div>
+            <span>0.1 - 0.5</span>
+        </div>
+    </div>
+    
+    <div id="loading" class="loading" style="display: none;">
+        <p>Loading earthquake data...</p>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on India
+        const map = L.map('map').setView([20.5937, 78.9629], 5);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Store markers and polygons for cleanup
+        let markers = [];
+        let polygons = [];
+        
+        // Get marker color based on magnitude
+        function getMarkerColor(magnitude) {
+            if (magnitude >= 4.0) return '#ff4444';
+            if (magnitude >= 3.0) return '#ff9800';
+            if (magnitude >= 2.0) return '#ffd700';
+            return '#4caf50';
+        }
+        
+        // Get polygon color and opacity based on intensity
+        function getPolygonStyle(intensity) {
+            if (intensity > 1.5) return { color: '#ff0000', fillOpacity: 0.4 };
+            if (intensity > 1.0) return { color: '#ff6600', fillOpacity: 0.3 };
+            if (intensity > 0.5) return { color: '#ffaa00', fillOpacity: 0.25 };
+            if (intensity > 0.1) return { color: '#ffdd00', fillOpacity: 0.2 };
+            return { color: '#cccccc', fillOpacity: 0.15 };
+        }
+        
+        // Create custom marker icon
+        function createMarkerIcon(magnitude, color) {
+            return L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="
+                    background: ${color};
+                    width: ${20 + magnitude * 5}px;
+                    height: ${20 + magnitude * 5}px;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                    font-size: ${10 + magnitude}px;
+                ">${magnitude.toFixed(1)}</div>`,
+                iconSize: [30 + magnitude * 5, 30 + magnitude * 5],
+                iconAnchor: [(15 + magnitude * 2.5), (15 + magnitude * 2.5)]
+            });
+        }
+        
+        // Fetch and display earthquake data
+        async function loadEarthquakeData() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/alerts/latest');
+                const data = await response.json();
+                
+                // Clear existing markers and polygons
+                markers.forEach(marker => map.removeLayer(marker));
+                polygons.forEach(polygon => map.removeLayer(polygon));
+                markers = [];
+                polygons = [];
+                
+                // Clear alert list
+                const alertList = document.getElementById('alert-list');
+                alertList.innerHTML = '';
+                
+                // Separate epicenters and intensity zones
+                const epicenters = data.features.filter(f => f.properties.feature_type === 'epicenter');
+                const intensityZones = data.features.filter(f => f.properties.feature_type === 'intensity_zone');
+                
+                // Add intensity zone polygons first (so they're behind markers)
+                intensityZones.forEach(feature => {
+                    const props = feature.properties;
+                    const intensity = props.intensity || 0;
+                    const style = getPolygonStyle(intensity);
+                    
+                    const polygon = L.geoJSON(feature.geometry, {
+                        style: {
+                            color: style.color,
+                            fillColor: style.color,
+                            fillOpacity: style.fillOpacity,
+                            weight: 2,
+                            opacity: 0.6
+                        }
+                    }).addTo(map);
+                    
+                    // Add popup to polygon
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <h3 style="margin: 0 0 0.5rem 0; color: ${style.color};">
+                                Intensity Zone
+                            </h3>
+                            <p style="margin: 0.25rem 0;"><strong>Intensity:</strong> ${intensity.toFixed(2)}</p>
+                            <p style="margin: 0.25rem 0;"><strong>Zone:</strong> ${props.zone_name || 'N/A'}</p>
+                            <p style="margin: 0.25rem 0;"><strong>Radius:</strong> ${props.radius ? (props.radius / 1000).toFixed(1) + ' km' : 'N/A'}</p>
+                            <p style="margin: 0.25rem 0;"><strong>Location:</strong> ${props.location || 'Unknown'}</p>
+                        </div>
+                    `;
+                    polygon.bindPopup(popupContent);
+                    
+                    polygons.push(polygon);
+                });
+                
+                // Add markers for each epicenter
+                epicenters.forEach(feature => {
+                    const props = feature.properties;
+                    const coords = feature.geometry.coordinates;
+                    const magnitude = props.magnitude || 0;
+                    const color = getMarkerColor(magnitude);
+                    
+                    // Create marker
+                    const marker = L.marker([coords[1], coords[0]], {
+                        icon: createMarkerIcon(magnitude, color)
+                    }).addTo(map);
+                    
+                    // Create popup
+                    const popupContent = `
+                        <div style="min-width: 200px;">
+                            <h3 style="margin: 0 0 0.5rem 0; color: ${color};">
+                                Magnitude ${magnitude.toFixed(1)}
+                            </h3>
+                            <p style="margin: 0.25rem 0;"><strong>Location:</strong> ${props.location || 'Unknown'}</p>
+                            <p style="margin: 0.25rem 0;"><strong>Depth:</strong> ${props.depth || 'N/A'}</p>
+                            <p style="margin: 0.25rem 0;"><strong>Coordinates:</strong> ${coords[1].toFixed(2)}°N, ${coords[0].toFixed(2)}°E</p>
+                            ${props.effective_start_time ? `<p style="margin: 0.25rem 0;"><strong>Time:</strong> ${new Date(props.effective_start_time).toLocaleString()}</p>` : ''}
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent);
+                    
+                    markers.push(marker);
+                    
+                    // Add to alert list
+                    const alertItem = document.createElement('div');
+                    alertItem.className = 'alert-item';
+                    alertItem.style.borderLeftColor = color;
+                    alertItem.innerHTML = `
+                        <div class="magnitude">M${magnitude.toFixed(1)}</div>
+                        <div class="location">${props.location || 'Unknown'}</div>
+                        <div class="depth">${props.depth || 'N/A'}</div>
+                    `;
+                    alertItem.onclick = () => {
+                        map.setView([coords[1], coords[0]], 8);
+                        marker.openPopup();
+                    };
+                    alertList.appendChild(alertItem);
+                });
+                
+                // Fit map to all features if any exist
+                if (markers.length > 0 || polygons.length > 0) {
+                    const allLayers = [...markers, ...polygons];
+                    const group = L.featureGroup(allLayers);
+                    map.fitBounds(group.getBounds().pad(0.1));
+                }
+                
+            } catch (error) {
+                console.error('Error loading earthquake data:', error);
+                alert('Failed to load earthquake data. Make sure the backend is running.');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        // Load data on page load
+        loadEarthquakeData();
+        
+        // Refresh data every 5 minutes
+        setInterval(loadEarthquakeData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
