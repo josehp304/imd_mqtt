@@ -1,5 +1,6 @@
 import requests
 import json
+import csv
 
 def fetch_earthquake_alerts():
     """Fetch earthquake alerts from NDMA CAP API"""
@@ -96,6 +97,54 @@ def convert_to_geojson(alerts_data):
     
     return geojson
 
+def convert_to_csv(alerts_data):
+    """Convert earthquake alerts to CSV format"""
+    rows = []
+    
+    if not alerts_data or "alerts" not in alerts_data:
+        return rows
+    
+    for alert in alerts_data["alerts"]:
+        warning_msg = alert.get("warning_message", "")
+        
+        # Parse data from warning message
+        magnitude = ""
+        latitude = ""
+        longitude = ""
+        location = ""
+        
+        if "Magnitude:" in warning_msg:
+            try:
+                magnitude = warning_msg.split("Magnitude:")[1].split(",")[0].strip()
+            except (IndexError, ValueError):
+                pass
+        
+        if "Lat:" in warning_msg and "Long:" in warning_msg:
+            try:
+                latitude = warning_msg.split("Lat:")[1].split("&")[0].strip()
+                longitude = warning_msg.split("Long:")[1].split(",")[0].strip()
+            except (IndexError, ValueError):
+                pass
+        
+        if "Location:" in warning_msg:
+            try:
+                location = warning_msg.split("Location:")[1].strip()
+            except IndexError:
+                pass
+        
+        row = {
+            "effective_start_time": alert.get("effective_start_time", ""),
+            "magnitude": magnitude,
+            "latitude": latitude,
+            "longitude": longitude,
+            "depth": alert.get("depth", ""),
+            "location": location,
+            "warning_message": warning_msg
+        }
+        rows.append(row)
+    
+    return rows
+
 def main():
     print("Fetching earthquake alerts from NDMA...")
     alerts_data = fetch_earthquake_alerts()
@@ -116,6 +165,18 @@ def main():
         with open("earthquake_alerts.geojson", "w") as f:
             json.dump(geojson, f, indent=2)
         print("Saved GeoJSON to earthquake_alerts.geojson")
+        
+        # Convert to CSV
+        # csv_data = convert_to_csv(alerts_data)
+        
+        # # Save CSV
+        # if csv_data:
+        #     with open("earthquake_alerts.csv", "w", newline='', encoding='utf-8') as f:
+        #         fieldnames = ["effective_start_time", "magnitude", "latitude", "longitude", "depth", "location", "warning_message"]
+        #         writer = csv.DictWriter(f, fieldnames=fieldnames)
+        #         writer.writeheader()
+        #         writer.writerows(csv_data)
+        #     print("Saved CSV to earthquake_alerts.csv")
         
         # Print summary
         print("\n--- Summary ---")
