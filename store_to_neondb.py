@@ -4,7 +4,6 @@ import psycopg2
 from psycopg2.extras import execute_values
 
 # NeonDB connection string - set this as environment variable or replace directly
-# Format: postgresql://user:password@hostname/database?sslmode=require
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 def connect_to_db():
