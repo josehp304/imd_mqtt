@@ -218,13 +218,38 @@
             return '#4caf50';
         }
         
-        // Get polygon color and opacity based on intensity
-        function getPolygonStyle(intensity) {
-            if (intensity > 1.5) return { color: '#ff0000', fillOpacity: 0.4 };
-            if (intensity > 1.0) return { color: '#ff6600', fillOpacity: 0.3 };
-            if (intensity > 0.5) return { color: '#ffaa00', fillOpacity: 0.25 };
-            if (intensity > 0.1) return { color: '#ffdd00', fillOpacity: 0.2 };
-            return { color: '#cccccc', fillOpacity: 0.15 };
+        // Get polygon color and opacity based on intensity or severity
+        function getPolygonStyle(intensity, severity, disasterType) {
+            // For earthquake intensity zones
+            if (intensity && intensity > 0) {
+                if (intensity > 1.5) return { color: '#ff0000', fillOpacity: 0.4 };
+                if (intensity > 1.0) return { color: '#ff6600', fillOpacity: 0.3 };
+                if (intensity > 0.5) return { color: '#ffaa00', fillOpacity: 0.25 };
+                if (intensity > 0.1) return { color: '#ffdd00', fillOpacity: 0.2 };
+                return { color: '#cccccc', fillOpacity: 0.15 };
+            }
+            
+            // For CAP alerts based on severity
+            if (severity) {
+                switch(severity.toLowerCase()) {
+                    case 'extreme': return { color: '#8B0000', fillOpacity: 0.5 };
+                    case 'severe': return { color: '#FF0000', fillOpacity: 0.4 };
+                    case 'moderate': return { color: '#FFA500', fillOpacity: 0.3 };
+                    case 'minor': return { color: '#FFFF00', fillOpacity: 0.25 };
+                    default: return { color: '#4169E1', fillOpacity: 0.2 };
+                }
+            }
+            
+            // Default based on disaster type
+            switch(disasterType) {
+                case 'Earthquake': return { color: '#FF0000', fillOpacity: 0.3 };
+                case 'Flood': return { color: '#0000FF', fillOpacity: 0.3 };
+                case 'Cyclone': return { color: '#800080', fillOpacity: 0.3 };
+                case 'Fire':
+                case 'Pre Fire': return { color: '#FF4500', fillOpacity: 0.3 };
+                case 'Avalanche': return { color: '#87CEEB', fillOpacity: 0.3 };
+                default: return { color: '#808080', fillOpacity: 0.25 };
+            }
         }
         
         // Create custom marker icon
@@ -269,15 +294,24 @@
                 const alertList = document.getElementById('alert-list');
                 alertList.innerHTML = '';
                 
-                // Separate epicenters and intensity zones
-                const epicenters = data.features.filter(f => f.properties.feature_type === 'epicenter');
-                const intensityZones = data.features.filter(f => f.properties.feature_type === 'intensity_zone');
+                // Separate epicenters and alert polygons
+                const earthquakeEpicenters = data.features.filter(f => 
+                    f.properties.feature_type === 'epicenter'
+                );
+                const alertPolygons = data.features.filter(f => 
+                    f.properties.feature_type === 'alert_area' || 
+                    f.properties.feature_type === 'earthquake_zone' || 
+                    f.properties.feature_type === 'intensity_zone'
+                );
                 
-                // Add intensity zone polygons first (so they're behind markers)
-                intensityZones.forEach(feature => {
+                // Add alert polygons first (so they're behind markers)
+                alertPolygons.forEach(feature => {
                     const props = feature.properties;
                     const intensity = props.intensity || 0;
-                    const style = getPolygonStyle(intensity);
+                    const style = getPolygonStyle(intensity, props.severity, props.disaster_type);
+                    
+                    // Skip if no geometry
+                    if (!feature.geometry) return;
                     
                     const polygon = L.geoJSON(feature.geometry, {
                         style: {
@@ -293,12 +327,15 @@
                     const popupContent = `
                         <div style="min-width: 200px;">
                             <h3 style="margin: 0 0 0.5rem 0; color: ${style.color};">
-                                Intensity Zone
+                                ${props.disaster_type || 'Alert'} - ${props.feature_type === 'alert_area' ? 'Alert Area' : 'Intensity Zone'}
                             </h3>
-                            <p style="margin: 0.25rem 0;"><strong>Intensity:</strong> ${intensity.toFixed(2)}</p>
-                            <p style="margin: 0.25rem 0;"><strong>Zone:</strong> ${props.zone_name || 'N/A'}</p>
-                            <p style="margin: 0.25rem 0;"><strong>Radius:</strong> ${props.radius ? (props.radius / 1000).toFixed(1) + ' km' : 'N/A'}</p>
-                            <p style="margin: 0.25rem 0;"><strong>Location:</strong> ${props.location || 'Unknown'}</p>
+                            ${props.intensity ? `<p style="margin: 0.25rem 0;"><strong>Intensity:</strong> ${intensity.toFixed(2)}</p>` : ''}
+                            ${props.zone_name ? `<p style="margin: 0.25rem 0;"><strong>Zone:</strong> ${props.zone_name}</p>` : ''}
+                            ${props.radius ? `<p style="margin: 0.25rem 0;"><strong>Radius:</strong> ${(props.radius / 1000).toFixed(1)} km</p>` : ''}
+                            ${props.severity ? `<p style="margin: 0.25rem 0;"><strong>Severity:</strong> ${props.severity}</p>` : ''}
+                            ${props.area_description ? `<p style="margin: 0.25rem 0;"><strong>Area:</strong> ${props.area_description}</p>` : ''}
+                            ${props.warning_message ? `<p style="margin: 0.25rem 0; max-width: 250px;"><strong>Warning:</strong> ${props.warning_message.substring(0, 150)}${props.warning_message.length > 150 ? '...' : ''}</p>` : ''}
+                            ${props.effective_start_time ? `<p style="margin: 0.25rem 0;"><strong>Time:</strong> ${new Date(props.effective_start_time).toLocaleString()}</p>` : ''}
                         </div>
                     `;
                     polygon.bindPopup(popupContent);
@@ -307,7 +344,7 @@
                 });
                 
                 // Add markers for each epicenter
-                epicenters.forEach(feature => {
+                earthquakeEpicenters.forEach(feature => {
                     const props = feature.properties;
                     const coords = feature.geometry.coordinates;
                     const magnitude = props.magnitude || 0;
