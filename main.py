@@ -3,6 +3,10 @@ import paho.mqtt.client as mqtt
 import ssl
 from fetch_alerts import main as fetch_main
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # 1. Define Settings
 
@@ -10,13 +14,13 @@ BROKER_URL = os.getenv("BROKER_URL")
 BROKER_PORT = os.getenv("BROKER_PORT")
 USERNAME = os.getenv("USERNAME")
 PASSWORD = os.getenv("PASSWORD")
-geojson_path = os.getenv("GEOJSON_PATH")
+geojson_path="cap_alerts.geojson"
 # 2. Define Callback Functions
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
         print("✅ Connected successfully!")
         # Subscribing in on_connect ensures we resubscribe if connection is lost
-        client.subscribe("earthquake") 
+        client.subscribe("cap_alerts") 
     else:
         print(f"❌ Failed to connect, return code {reason_code}")
 
@@ -55,11 +59,11 @@ with open(geojson_path, "r") as f:
     geo_content = f.read()
 
 try:
-    result = client.publish("earthquake",geo_content,qos=1)
+    result = client.publish("cap_alerts",geo_content,qos=1)
     print(result)
     
     if result[0] == 0:
-        print("successfully sent new earthquake cap alerts")
+        print("successfully sent new CAP alerts")
     else:
         print("failed to send message")
 except Exception as e:

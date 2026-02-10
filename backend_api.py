@@ -20,29 +20,32 @@ def index():
 
 @app.route('/api/alerts/latest', methods=['GET'])
 def get_latest_alerts():
-    """Get the latest earthquake alerts as GeoJSON"""
+    """Get all latest CAP alerts as GeoJSON"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Get all features from the latest batch (by created_at)
+        # Get all features from cap_alerts
         cur.execute("""
             SELECT 
+                identifier,
                 feature_type,
                 ST_AsGeoJSON(geometry) as geometry,
-                warning_message,
+                severity,
                 effective_start_time,
+                disaster_type,
+                area_description,
+                warning_message,
+                severity_color,
                 depth,
-                magnitude,
-                latitude,
-                longitude,
-                location,
                 intensity,
                 color,
+                latitude,
+                longitude,
                 radius,
                 zone_name,
                 properties
-            FROM earthquake_alerts
+            FROM cap_alerts
             ORDER BY created_at DESC
         """)
         
@@ -50,20 +53,23 @@ def get_latest_alerts():
         for row in cur.fetchall():
             feature = {
                 "type": "Feature",
-                "geometry": json.loads(row[1]) if row[1] else None,
+                "geometry": json.loads(row[2]) if row[2] else None,
                 "properties": {
-                    "feature_type": row[0],
-                    "warning_message": row[2],
-                    "effective_start_time": row[3].isoformat() if row[3] else None,
-                    "depth": row[4],
-                    "magnitude": float(row[5]) if row[5] else None,
-                    "latitude": float(row[6]) if row[6] else None,
-                    "longitude": float(row[7]) if row[7] else None,
-                    "location": row[8],
-                    "intensity": float(row[9]) if row[9] else None,
-                    "color": row[10],
-                    "radius": float(row[11]) if row[11] else None,
-                    "zone_name": row[12]
+                    "identifier": row[0],
+                    "feature_type": row[1],
+                    "severity": row[3],
+                    "effective_start_time": row[4].isoformat() if row[4] else None,
+                    "disaster_type": row[5],
+                    "area_description": row[6],
+                    "warning_message": row[7],
+                    "severity_color": row[8],
+                    "depth": row[9],
+                    "intensity": float(row[10]) if row[10] else None,
+                    "color": row[11],
+                    "latitude": float(row[12]) if row[12] else None,
+                    "longitude": float(row[13]) if row[13] else None,
+                    "radius": float(row[14]) if row[14] else None,
+                    "zone_name": row[15]
                 }
             }
             features.append(feature)
@@ -83,7 +89,7 @@ def get_latest_alerts():
 
 @app.route('/api/alerts/epicenters', methods=['GET'])
 def get_epicenters():
-    """Get only the epicenter points"""
+    """Get only earthquake epicenter points"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -91,15 +97,15 @@ def get_epicenters():
         cur.execute("""
             SELECT 
                 ST_AsGeoJSON(geometry) as geometry,
-                location,
-                magnitude,
+                area_description,
                 latitude,
                 longitude,
                 depth,
-                effective_start_time
-            FROM earthquake_alerts
-            WHERE feature_type = 'epicenter'
-            ORDER BY magnitude DESC
+                effective_start_time,
+                warning_message
+            FROM cap_alerts
+            WHERE disaster_type = 'Earthquake' AND latitude IS NOT NULL
+            ORDER BY effective_start_time DESC
         """)
         
         features = []
@@ -109,11 +115,11 @@ def get_epicenters():
                 "geometry": json.loads(row[0]) if row[0] else None,
                 "properties": {
                     "location": row[1],
-                    "magnitude": float(row[2]) if row[2] else None,
-                    "latitude": float(row[3]) if row[3] else None,
-                    "longitude": float(row[4]) if row[4] else None,
-                    "depth": row[5],
-                    "effective_start_time": row[6].isoformat() if row[6] else None
+                    "latitude": float(row[2]) if row[2] else None,
+                    "longitude": float(row[3]) if row[3] else None,
+                    "depth": row[4],
+                    "effective_start_time": row[5].isoformat() if row[5] else None,
+                    "warning_message": row[6]
                 }
             }
             features.append(feature)

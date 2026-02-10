@@ -22,25 +22,43 @@ def setup_database(conn):
         cur.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
         
         # Drop existing table if you want to refresh data
-        cur.execute("DROP TABLE IF EXISTS earthquake_alerts CASCADE;")
+        cur.execute("DROP TABLE IF EXISTS cap_alerts CASCADE;")
         
         # Create table with geometry column and properties as JSONB
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS earthquake_alerts (
+            CREATE TABLE IF NOT EXISTS cap_alerts (
                 id SERIAL PRIMARY KEY,
+                identifier VARCHAR(255) UNIQUE,
                 feature_type VARCHAR(50),
                 geometry GEOMETRY,
-                warning_message TEXT,
+                severity VARCHAR(50),
                 effective_start_time TIMESTAMP,
-                depth VARCHAR(20),
-                magnitude DECIMAL(3,1),
-                latitude DECIMAL(10,6),
-                longitude DECIMAL(10,6),
-                location VARCHAR(255),
-                intensity DECIMAL(5,2),
+                effective_end_time TIMESTAMP,
+                disaster_type VARCHAR(100),
+                area_description TEXT,
+                severity_level TEXT,
+                type VARCHAR(50),
+                actual_lang VARCHAR(10),
+                warning_message TEXT,
+                disseminated VARCHAR(20),
+                severity_color VARCHAR(50),
+                alert_id_sdma_autoinc VARCHAR(50),
+                centroid VARCHAR(255),
+                alert_source VARCHAR(255),
+                area_covered VARCHAR(50),
+                sender_org_id VARCHAR(50),
+                polygon_area_covered VARCHAR(50),
+                min_lat VARCHAR(20),
+                max_lat VARCHAR(20),
+                min_long VARCHAR(20),
+                max_long VARCHAR(20),
+                depth VARCHAR(50),
+                intensity DECIMAL,
                 color VARCHAR(50),
-                radius DECIMAL(15,2),
-                zone_name VARCHAR(100),
+                latitude DECIMAL,
+                longitude DECIMAL,
+                radius DECIMAL,
+                zone_name VARCHAR(255),
                 properties JSONB,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -48,20 +66,32 @@ def setup_database(conn):
         
         # Create spatial index for efficient geo queries
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_earthquake_alerts_geometry 
-            ON earthquake_alerts USING GIST (geometry);
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_geometry 
+            ON cap_alerts USING GIST (geometry);
         """)
         
         # Create index on feature_type for filtering
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_earthquake_alerts_feature_type 
-            ON earthquake_alerts (feature_type);
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_feature_type 
+            ON cap_alerts (feature_type);
         """)
         
-        # Create index on magnitude for filtering
+        # Create index on disaster_type for filtering
         cur.execute("""
-            CREATE INDEX IF NOT EXISTS idx_earthquake_alerts_magnitude 
-            ON earthquake_alerts (magnitude);
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_disaster_type 
+            ON cap_alerts (disaster_type);
+        """)
+        
+        # Create index on severity for filtering
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_severity 
+            ON cap_alerts (severity);
+        """)
+        
+        # Create index on identifier for lookups
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_identifier 
+            ON cap_alerts (identifier);
         """)
         
         conn.commit()
@@ -95,80 +125,157 @@ def insert_features(conn, geojson_data):
     
     with conn.cursor() as cur:
         inserted_count = 0
+        skipped_count = 0
         
         for feature in features:
             props = feature.get("properties", {})
             geometry = feature.get("geometry", {})
             
-            # Convert geometry to WKT format for PostGIS
-            geom_json = json.dumps(geometry)
+            # Convert geometry to WKT format for PostGIS (handle null geometry)
+            geom_json = json.dumps(geometry) if geometry else None
             
-            # Parse timestamp
-            timestamp = parse_timestamp(props.get("effective_start_time"))
+            # Parse timestamps
+            effective_start = parse_timestamp(props.get("effective_start_time"))
+            effective_end = parse_timestamp(props.get("effective_end_time"))
             
-            cur.execute("""
-                INSERT INTO earthquake_alerts (
-                    feature_type, geometry, warning_message, effective_start_time,
-                    depth, magnitude, latitude, longitude, location,
-                    intensity, color, radius, zone_name, properties
-                ) VALUES (
-                    %s, ST_GeomFromGeoJSON(%s), %s, %s,
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
-                )
-            """, (
-                props.get("feature_type"),
-                geom_json,
-                props.get("warning_message"),
-                timestamp,
-                props.get("depth"),
-                props.get("magnitude"),
-                props.get("latitude"),
-                props.get("longitude"),
-                props.get("location"),
-                props.get("intensity"),
-                props.get("color"),
-                props.get("radius"),
-                props.get("zone_name"),
-                json.dumps(props)
-            ))
-            inserted_count += 1
+            try:
+                cur.execute("""
+                    INSERT INTO cap_alerts (
+                        identifier, feature_type, geometry, severity, effective_start_time,
+                        effective_end_time, disaster_type, area_description, severity_level,
+                        type, actual_lang, warning_message, disseminated, severity_color,
+                        alert_id_sdma_autoinc, centroid, alert_source, area_covered,
+                        sender_org_id, polygon_area_covered, min_lat, max_lat, min_long, max_long,
+                        depth, intensity, color, latitude, longitude, radius, zone_name, properties
+                    ) VALUES (
+                        %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    ON CONFLICT (identifier) DO UPDATE SET
+                        feature_type = EXCLUDED.feature_type,
+                        geometry = EXCLUDED.geometry,
+                        severity = EXCLUDED.severity,
+                        effective_start_time = EXCLUDED.effective_start_time,
+                        effective_end_time = EXCLUDED.effective_end_time,
+                        disaster_type = EXCLUDED.disaster_type,
+                        area_description = EXCLUDED.area_description,
+                        severity_level = EXCLUDED.severity_level,
+                        type = EXCLUDED.type,
+                        actual_lang = EXCLUDED.actual_lang,
+                        warning_message = EXCLUDED.warning_message,
+                        disseminated = EXCLUDED.disseminated,
+                        severity_color = EXCLUDED.severity_color,
+                        alert_id_sdma_autoinc = EXCLUDED.alert_id_sdma_autoinc,
+                        centroid = EXCLUDED.centroid,
+                        alert_source = EXCLUDED.alert_source,
+                        area_covered = EXCLUDED.area_covered,
+                        sender_org_id = EXCLUDED.sender_org_id,
+                        polygon_area_covered = EXCLUDED.polygon_area_covered,
+                        min_lat = EXCLUDED.min_lat,
+                        max_lat = EXCLUDED.max_lat,
+                        min_long = EXCLUDED.min_long,
+                        max_long = EXCLUDED.max_long,
+                        depth = EXCLUDED.depth,
+                        intensity = EXCLUDED.intensity,
+                        color = EXCLUDED.color,
+                        latitude = EXCLUDED.latitude,
+                        longitude = EXCLUDED.longitude,
+                        radius = EXCLUDED.radius,
+                        zone_name = EXCLUDED.zone_name,
+                        properties = EXCLUDED.properties
+                """, (
+                    props.get("identifier"),
+                    props.get("feature_type"),
+                    geom_json,
+                    props.get("severity"),
+                    effective_start,
+                    effective_end,
+                    props.get("disaster_type"),
+                    props.get("area_description"),
+                    props.get("severity_level"),
+                    props.get("type"),
+                    props.get("actual_lang"),
+                    props.get("warning_message"),
+                    props.get("disseminated"),
+                    props.get("severity_color"),
+                    props.get("alert_id_sdma_autoinc"),
+                    props.get("centroid"),
+                    props.get("alert_source"),
+                    props.get("area_covered"),
+                    props.get("sender_org_id"),
+                    props.get("polygon_area_covered"),
+                    props.get("min_lat"),
+                    props.get("max_lat"),
+                    props.get("min_long"),
+                    props.get("max_long"),
+                    props.get("depth"),
+                    props.get("intensity"),
+                    props.get("color"),
+                    props.get("latitude"),
+                    props.get("longitude"),
+                    props.get("radius"),
+                    props.get("zone_name"),
+                    json.dumps(props)
+                ))
+                inserted_count += 1
+            except Exception as e:
+                print(f"Error inserting feature with identifier {props.get('identifier')}: {e}")
+                skipped_count += 1
+                continue
         
         conn.commit()
         print(f"✅ Inserted {inserted_count} features into database")
+        if skipped_count > 0:
+            print(f"⚠️ Skipped {skipped_count} features due to errors")
 
 def query_sample_data(conn):
     """Query and display sample data to verify insertion"""
     with conn.cursor() as cur:
         # Count total features
-        cur.execute("SELECT COUNT(*) FROM earthquake_alerts")
+        cur.execute("SELECT COUNT(*) FROM cap_alerts")
         total = cur.fetchone()[0]
         print(f"\n📊 Total features in database: {total}")
         
         # Count by feature type
         cur.execute("""
             SELECT feature_type, COUNT(*) 
-            FROM earthquake_alerts 
+            FROM cap_alerts 
             GROUP BY feature_type
         """)
         print("\nFeatures by type:")
         for row in cur.fetchall():
             print(f"  • {row[0]}: {row[1]}")
         
-        # List epicenters
+        # Count by disaster type
         cur.execute("""
-            SELECT location, magnitude, latitude, longitude 
-            FROM earthquake_alerts 
-            WHERE feature_type = 'epicenter'
-            ORDER BY magnitude DESC
+            SELECT disaster_type, COUNT(DISTINCT identifier) 
+            FROM cap_alerts 
+            GROUP BY disaster_type
+            ORDER BY COUNT(DISTINCT identifier) DESC
         """)
-        print("\nEpicenter locations:")
+        print("\nAlerts by disaster type:")
         for row in cur.fetchall():
-            print(f"  • M{row[1]} - {row[0]} ({row[2]}, {row[3]})")
+            print(f"  • {row[0]}: {row[1]} alert(s)")
+        
+        # List recent alerts by severity
+        cur.execute("""
+            SELECT DISTINCT identifier, disaster_type, severity, warning_message, area_description, effective_start_time
+            FROM cap_alerts 
+            ORDER BY effective_start_time DESC
+            LIMIT 10
+        """)
+        print("\nRecent alerts:")
+        for row in cur.fetchall():
+            msg_preview = row[3][:60] if row[3] else 'N/A'
+            print(f"  • [{row[2]}] {row[1]} - {msg_preview}...")
 
 def main():
     # Load GeoJSON file
-    geojson_path = "earthquake_alerts.geojson"
+    geojson_path = "cap_alerts.geojson"
     
     try:
         with open(geojson_path, "r") as f:
