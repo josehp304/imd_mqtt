@@ -273,46 +273,189 @@ def query_sample_data(conn):
             msg_preview = row[3][:60] if row[3] else 'N/A'
             print(f"  • [{row[2]}] {row[1]} - {msg_preview}...")
 
-def main():
-    # Load GeoJSON file
-    geojson_path = "cap_alerts.geojson"
+def store_alerts_to_neondb(geojson_data=None, geojson_path="cap_alerts.geojson", setup_schema=False):
+    """
+    Store alerts to NeonDB. Can be called with geojson_data directly or load from file.
     
-    try:
-        with open(geojson_path, "r") as f:
-            geojson_data = json.load(f)
-        print(f"📂 Loaded {len(geojson_data.get('features', []))} features from {geojson_path}")
-    except FileNotFoundError:
-        print(f"❌ File not found: {geojson_path}")
-        print("Run fetch_alerts.py first to generate the GeoJSON file")
-        return
+    Args:
+        geojson_data: GeoJSON data dictionary (optional, will load from file if not provided)
+        geojson_path: Path to GeoJSON file (default: "cap_alerts.geojson")
+        setup_schema: Whether to setup/reset the database schema (default: False)
+    
+    Returns:
+        dict: Statistics about the operation
+    """
+    # Load GeoJSON if not provided
+    if geojson_data is None:
+        try:
+            with open(geojson_path, "r") as f:
+                geojson_data = json.load(f)
+            print(f"📂 Loaded {len(geojson_data.get('features', []))} features from {geojson_path}")
+        except FileNotFoundError:
+            print(f"❌ File not found: {geojson_path}")
+            return {"success": False, "error": "File not found"}
     
     # Connect to database
     try:
-        print("\n🔌 Connecting to NeonDB...")
+        print("🔌 Connecting to NeonDB...")
         conn = connect_to_db()
         print("✅ Connected to database")
         
-        # Setup schema
-        print("\n📋 Setting up database schema...")
-        setup_database(conn)
+        # Setup schema if requested
+        if setup_schema:
+            print("📋 Setting up database schema...")
+            setup_database(conn)
         
         # Insert features
-        print("\n📥 Inserting GeoJSON features...")
-        insert_features(conn, geojson_data)
+        print("📥 Storing alerts to NeonDB...")
+        features = geojson_data.get("features", [])
         
-        # Verify data
-        print("\n🔍 Verifying inserted data...")
-        query_sample_data(conn)
+        if not features:
+            print("⚠️ No features to insert")
+            conn.close()
+            return {"success": True, "inserted": 0, "skipped": 0}
+        
+        with conn.cursor() as cur:
+            inserted_count = 0
+            skipped_count = 0
+            
+            for feature in features:
+                props = feature.get("properties", {})
+                geometry = feature.get("geometry", {})
+                
+                # Convert geometry to WKT format for PostGIS (handle null geometry)
+                geom_json = json.dumps(geometry) if geometry else None
+                
+                # Parse timestamps
+                effective_start = parse_timestamp(props.get("effective_start_time"))
+                effective_end = parse_timestamp(props.get("effective_end_time"))
+                
+                try:
+                    cur.execute("""
+                        INSERT INTO cap_alerts (
+                            identifier, feature_type, geometry, severity, effective_start_time,
+                            effective_end_time, disaster_type, area_description, severity_level,
+                            type, actual_lang, warning_message, disseminated, severity_color,
+                            alert_id_sdma_autoinc, centroid, alert_source, area_covered,
+                            sender_org_id, polygon_area_covered, min_lat, max_lat, min_long, max_long,
+                            depth, intensity, color, latitude, longitude, radius, zone_name, properties
+                        ) VALUES (
+                            %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s, %s, %s, %s
+                        )
+                        ON CONFLICT (identifier) DO UPDATE SET
+                            feature_type = EXCLUDED.feature_type,
+                            geometry = EXCLUDED.geometry,
+                            severity = EXCLUDED.severity,
+                            effective_start_time = EXCLUDED.effective_start_time,
+                            effective_end_time = EXCLUDED.effective_end_time,
+                            disaster_type = EXCLUDED.disaster_type,
+                            area_description = EXCLUDED.area_description,
+                            severity_level = EXCLUDED.severity_level,
+                            type = EXCLUDED.type,
+                            actual_lang = EXCLUDED.actual_lang,
+                            warning_message = EXCLUDED.warning_message,
+                            disseminated = EXCLUDED.disseminated,
+                            severity_color = EXCLUDED.severity_color,
+                            alert_id_sdma_autoinc = EXCLUDED.alert_id_sdma_autoinc,
+                            centroid = EXCLUDED.centroid,
+                            alert_source = EXCLUDED.alert_source,
+                            area_covered = EXCLUDED.area_covered,
+                            sender_org_id = EXCLUDED.sender_org_id,
+                            polygon_area_covered = EXCLUDED.polygon_area_covered,
+                            min_lat = EXCLUDED.min_lat,
+                            max_lat = EXCLUDED.max_lat,
+                            min_long = EXCLUDED.min_long,
+                            max_long = EXCLUDED.max_long,
+                            depth = EXCLUDED.depth,
+                            intensity = EXCLUDED.intensity,
+                            color = EXCLUDED.color,
+                            latitude = EXCLUDED.latitude,
+                            longitude = EXCLUDED.longitude,
+                            radius = EXCLUDED.radius,
+                            zone_name = EXCLUDED.zone_name,
+                            properties = EXCLUDED.properties
+                    """, (
+                        props.get("identifier"),
+                        props.get("feature_type"),
+                        geom_json,
+                        props.get("severity"),
+                        effective_start,
+                        effective_end,
+                        props.get("disaster_type"),
+                        props.get("area_description"),
+                        props.get("severity_level"),
+                        props.get("type"),
+                        props.get("actual_lang"),
+                        props.get("warning_message"),
+                        props.get("disseminated"),
+                        props.get("severity_color"),
+                        props.get("alert_id_sdma_autoinc"),
+                        props.get("centroid"),
+                        props.get("alert_source"),
+                        props.get("area_covered"),
+                        props.get("sender_org_id"),
+                        props.get("polygon_area_covered"),
+                        props.get("min_lat"),
+                        props.get("max_lat"),
+                        props.get("min_long"),
+                        props.get("max_long"),
+                        props.get("depth"),
+                        props.get("intensity"),
+                        props.get("color"),
+                        props.get("latitude"),
+                        props.get("longitude"),
+                        props.get("radius"),
+                        props.get("zone_name"),
+                        json.dumps(props)
+                    ))
+                    inserted_count += 1
+                except Exception as e:
+                    print(f"⚠️ Error inserting feature with identifier {props.get('identifier')}: {e}")
+                    skipped_count += 1
+                    continue
+            
+            conn.commit()
+        
+        print(f"✅ Stored {inserted_count} alerts to NeonDB")
+        if skipped_count > 0:
+            print(f"⚠️ Skipped {skipped_count} alerts due to errors")
         
         conn.close()
-        print("\n✅ Done! Data successfully stored in NeonDB")
+        return {"success": True, "inserted": inserted_count, "skipped": skipped_count}
         
     except ValueError as e:
         print(f"❌ Configuration error: {e}")
-        print("\nTo set the DATABASE_URL environment variable:")
-        print("  export DATABASE_URL='postgresql://user:password@hostname/database?sslmode=require'")
+        print("\nTo set the DATABASE_URL environment variable, add it to your .env file:")
+        print("  DATABASE_URL='postgresql://user:password@hostname/database?sslmode=require'")
+        return {"success": False, "error": str(e)}
     except psycopg2.Error as e:
         print(f"❌ Database error: {e}")
+        return {"success": False, "error": str(e)}
+
+def main():
+    """Standalone script to store alerts from GeoJSON file to NeonDB"""
+    geojson_path = "cap_alerts.geojson"
+    
+    # Store alerts with schema setup
+    result = store_alerts_to_neondb(geojson_path=geojson_path, setup_schema=True)
+    
+    if result["success"]:
+        # Connect to verify data
+        try:
+            conn = connect_to_db()
+            print("\n🔍 Verifying inserted data...")
+            query_sample_data(conn)
+            conn.close()
+            print("\n✅ Done! Data successfully stored in NeonDB")
+        except Exception as e:
+            print(f"⚠️ Could not verify data: {e}")
+    else:
+        print(f"\n❌ Failed to store data: {result.get('error', 'Unknown error')}")
 
 if __name__ == "__main__":
     main()
