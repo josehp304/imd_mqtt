@@ -6,7 +6,7 @@ This script listens to MQTT sensor status topics and stores sensor location data
 
 - ✅ Listens to MQTT topic(s) for sensor status messages
 - ✅ Extracts sensor ID, latitude, and longitude
-- ✅ Stores data in PostgreSQL/NeonDB with full message payload
+- ✅ Stores data in local Docker PostgreSQL with full message payload
 - ✅ Supports multiple sensor topics (rainfall, temperature, etc.)
 - ✅ Automatic database table creation
 - ✅ Indexed for fast spatial queries
@@ -41,8 +41,8 @@ BROKER_PORT=8883
 USERNAME=your-username
 PASSWORD=your-password
 
-# Database
-DATABASE_URL=postgresql://user:pass@host.neon.tech/dbname?sslmode=require
+# Local Docker PostgreSQL
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/alertsdb
 ```
 
 ### 2. Run the Listener

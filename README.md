@@ -1,7 +1,7 @@
 # IMD MQTT Alert System
 
 ## Overview
-This system fetches disaster alerts from NDMA (National Disaster Management Authority), stores them in a Neon PostgreSQL database, categorizes them by type, and publishes each type to its own MQTT topic.
+This system fetches disaster alerts from NDMA (National Disaster Management Authority), stores them in a local Docker PostgreSQL database, categorizes them by type, and publishes each type to its own MQTT topic.
 
 ## Main Components
 
@@ -9,7 +9,7 @@ This system fetches disaster alerts from NDMA (National Disaster Management Auth
 The main program that orchestrates the entire workflow:
 1. Connects to MQTT broker
 2. Fetches alerts from NDMA API
-3. **Stores alerts to Neon database** (with spatial data)
+3. **Stores alerts to local PostgreSQL database** (with spatial data)
 4. Categorizes alerts into specific types
 5. Publishes each category to its own MQTT topic
 6. Listens for incoming messages
@@ -22,7 +22,7 @@ Fetches disaster alerts from NDMA CAP API:
 - Exports to JSON, CSV, and GeoJSON formats
 
 ### 3. `store_to_neondb.py` - Database Storage
-Stores alerts in Neon PostgreSQL database with:
+Stores alerts in a local Docker PostgreSQL database with:
 - PostGIS extension for spatial data
 - Geometry indexing for efficient location queries
 - Full alert properties and metadata
@@ -73,8 +73,8 @@ BROKER_PORT=8883
 USERNAME=your_mqtt_username
 PASSWORD=your_mqtt_password
 
-# Neon Database Configuration
-DATABASE_URL=postgresql://user:password@hostname/database?sslmode=require
+# Local Docker PostgreSQL Configuration
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/alertsdb
 ```
 
 ## Database Schema
@@ -177,11 +177,11 @@ Found 40 regular CAP alerts
 Found 10 earthquake alerts
 Total combined alerts: 50
 
-💾 Storing alerts to NeonDB...
-🔌 Connecting to NeonDB...
+💾 Storing alerts to local PostgreSQL...
+🔌 Connecting to database...
 ✅ Connected to database
-📥 Storing alerts to NeonDB...
-✅ Stored 50 alerts to NeonDB
+📥 Storing alerts to local PostgreSQL...
+✅ Stored 50 alerts to PostgreSQL
 ✅ Database storage complete: 50 alerts stored
 
 📂 Loading alert data...
@@ -218,7 +218,7 @@ Categories: 5
 ## Features
 
 ✅ Automatic alert fetching from NDMA API
-✅ PostgreSQL/PostGIS database storage with spatial indexing
+✅ Local Docker PostgreSQL/PostGIS database storage with spatial indexing
 ✅ Intelligent alert categorization (16 types)
 ✅ Bilingual support (English & Hindi)
 ✅ Category-specific MQTT topics

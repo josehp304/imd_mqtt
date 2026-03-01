@@ -2,7 +2,9 @@ import json
 import os
 import psycopg2
 from psycopg2.extras import execute_values
+from dotenv import load_dotenv
 
+load_dotenv()
 # NeonDB connection string - set this as environment variable or replace directly
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
@@ -160,7 +162,7 @@ def insert_features(conn, geojson_data):
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (identifier) DO UPDATE SET
                         alert_category = EXCLUDED.alert_category,
@@ -366,7 +368,7 @@ def store_alerts_to_neondb(geojson_data=None, geojson_path="cap_alerts.geojson",
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s, %s
                         )
                         ON CONFLICT (identifier) DO UPDATE SET
                             alert_category = EXCLUDED.alert_category,

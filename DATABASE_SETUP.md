@@ -1,20 +1,30 @@
 # Database Setup Guide
 
-## Setting up Neon Database
+## Setting up Local Docker PostgreSQL
 
-### 1. Get Your Neon Database Connection String
+### 1. Start the PostgreSQL Docker Container
 
-1. Go to [Neon Console](https://console.neon.tech/)
-2. Create a project or select an existing one
-3. Go to the "Connection Details" section
-4. Copy your connection string (it looks like):
-   ```
-   postgresql://username:password@hostname.region.aws.neon.tech/dbname?sslmode=require
-   ```
+Make sure Docker is running, then start the local PostgreSQL container with PostGIS:
+
+```bash
+docker run -d \
+  --name imd_postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=alertsdb \
+  -p 5432:5432 \
+  postgis/postgis:15-3.3
+```
+
+Or if you already have a `docker-compose.yml`, just run:
+
+```bash
+docker compose up -d
+```
 
 ### 2. Add to .env File
 
-Add the DATABASE_URL to your `.env` file:
+Add the DATABASE_URL to your `.env` file pointing to the local container:
 
 ```env
 # MQTT Broker Configuration
@@ -23,8 +33,8 @@ BROKER_PORT=8883
 USERNAME=josee  
 PASSWORD=Josehp123.  
 
-# Neon Database Configuration (add this)
-DATABASE_URL=postgresql://username:password@hostname.region.aws.neon.tech/dbname?sslmode=require
+# Local Docker PostgreSQL Configuration
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/alertsdb
 ```
 
 ### 3. Initialize Database Schema
@@ -136,7 +146,7 @@ NDMA API → Fetch Alerts
     ↓
 Save to GeoJSON/CSV/JSON
     ↓
-Store to Neon Database ← (NEW FEATURE)
+Store to Local PostgreSQL ← (NEW FEATURE)
     ↓
 Categorize Alerts
     ↓
@@ -160,6 +170,12 @@ To test your database connection:
 python -c "import psycopg2; import os; from dotenv import load_dotenv; load_dotenv(); conn = psycopg2.connect(os.getenv('DATABASE_URL')); print('✅ Database connection successful'); conn.close()"
 ```
 
+Or connect directly via the Docker container:
+
+```bash
+docker exec -it imd_postgres psql -U postgres -d alertsdb
+```
+
 ## Troubleshooting
 
 ### Error: "DATABASE_URL environment variable is not set"
@@ -169,10 +185,14 @@ python -c "import psycopg2; import os; from dotenv import load_dotenv; load_dote
 - Run `python store_to_neondb.py` to create the schema
 
 ### Error: "could not connect to server"
-- Check your Neon database is active
-- Verify the connection string is correct
-- Ensure sslmode=require is in the connection string
+- Make sure the Docker container is running: `docker ps`
+- Start it if stopped: `docker start imd_postgres`
+- Verify the port mapping is correct (default: 5432)
+- Check the connection string matches your container credentials
 
 ### Error: "PostGIS extension not available"
-- PostGIS should be automatically available in Neon
-- If not, contact Neon support to enable it
+- Make sure you're using the `postgis/postgis` Docker image, not plain `postgres`
+- Connect to the container and enable it manually:
+  ```bash
+  docker exec -it imd_postgres psql -U postgres -d alertsdb -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+  ```

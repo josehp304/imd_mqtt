@@ -1,10 +1,10 @@
-# Implementation Summary: Neon Database Integration
+# Implementation Summary: Local PostgreSQL Database Integration
 
 ## What Was Implemented
 
 ### ✅ Database Storage After Fetching Alerts
 
-The system now **automatically stores all fetched alerts to Neon database** after retrieving them from NDMA API.
+The system now **automatically stores all fetched alerts to a local Docker PostgreSQL database** after retrieving them from NDMA API.
 
 ## Files Modified
 
@@ -14,8 +14,8 @@ The system now **automatically stores all fetched alerts to Neon database** afte
 print("📥 Fetching alerts from NDMA...")
 fetch_main()
 
-# Store to NeonDB (NEW!)
-print("\n💾 Storing alerts to NeonDB...")
+# Store to local PostgreSQL (NEW!)
+print("\n💾 Storing alerts to local PostgreSQL...")
 db_result = store_alerts_to_neondb(geojson_path=geojson_path, setup_schema=False)
 if db_result["success"]:
     print(f"✅ Database storage complete: {db_result['inserted']} alerts stored")
@@ -50,7 +50,7 @@ Added `store_alerts_to_neondb()` function that:
 └─────────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────────┐
-│ 3. Store to Neon Database ★ NEW ★                       │
+│ 3. Store to Local Docker PostgreSQL ★ NEW ★             │
 │    - PostGIS geometry data                              │
 │    - All alert properties                               │
 │    - Indexed for fast queries                           │
@@ -108,11 +108,13 @@ WHERE ST_DWithin(
 
 Add to your `.env` file:
 ```env
-DATABASE_URL=postgresql://user:password@hostname/database?sslmode=require
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/alertsdb
 ```
 
-Get your Neon connection string from:
-https://console.neon.tech/ → Your Project → Connection Details
+Make sure your local Docker PostgreSQL container is running:
+```bash
+docker start imd_postgres
+```
 
 ## Error Handling
 
@@ -127,13 +129,22 @@ The system is robust:
 
 ### First Time Setup
 ```bash
-# 1. Add DATABASE_URL to .env file
-echo "DATABASE_URL=your_neon_connection_string" >> .env
+# 1. Start the local Docker PostgreSQL container
+docker run -d \
+  --name imd_postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=alertsdb \
+  -p 5432:5432 \
+  postgis/postgis:15-3.3
 
-# 2. Initialize database schema (run once)
+# 2. Add DATABASE_URL to .env file
+echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/alertsdb" >> .env
+
+# 3. Initialize database schema (run once)
 python store_to_neondb.py
 
-# 3. Run the main program
+# 4. Run the main program
 python main.py
 ```
 
@@ -151,11 +162,11 @@ Found 40 regular CAP alerts
 Found 10 earthquake alerts
 Total combined alerts: 50
 
-💾 Storing alerts to NeonDB...
-🔌 Connecting to NeonDB...
+💾 Storing alerts to local PostgreSQL...
+🔌 Connecting to database...
 ✅ Connected to database
-📥 Storing alerts to NeonDB...
-✅ Stored 50 alerts to NeonDB
+📥 Storing alerts to local PostgreSQL...
+✅ Stored 50 alerts to PostgreSQL
 ✅ Database storage complete: 50 alerts stored
 
 📂 Loading alert data...
@@ -171,8 +182,8 @@ Total combined alerts: 50
 3. **Spatial Queries**: Query alerts by location using PostGIS
 4. **Data Analysis**: Analyze trends, patterns, frequencies
 5. **API Development**: Build APIs on top of stored data
-6. **Backup**: Data is safely stored in cloud database
-7. **Scalability**: Neon database scales automatically
+6. **Local Control**: Database runs locally — no cloud dependency or costs
+7. **Fast Access**: Low-latency queries with no network round-trip to a cloud host
 
 ## Files Created/Modified
 
