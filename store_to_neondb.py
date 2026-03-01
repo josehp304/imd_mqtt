@@ -29,6 +29,7 @@ def setup_database(conn):
             CREATE TABLE IF NOT EXISTS cap_alerts (
                 id SERIAL PRIMARY KEY,
                 identifier VARCHAR(255) UNIQUE,
+                alert_category VARCHAR(100),
                 feature_type VARCHAR(50),
                 geometry GEOMETRY,
                 severity VARCHAR(50),
@@ -93,6 +94,12 @@ def setup_database(conn):
             CREATE INDEX IF NOT EXISTS idx_cap_alerts_identifier 
             ON cap_alerts (identifier);
         """)
+
+        # Create index on alert_category for topic-based filtering
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_cap_alerts_alert_category 
+            ON cap_alerts (alert_category);
+        """)
         
         conn.commit()
         print("✅ Database schema created successfully")
@@ -141,21 +148,22 @@ def insert_features(conn, geojson_data):
             try:
                 cur.execute("""
                     INSERT INTO cap_alerts (
-                        identifier, feature_type, geometry, severity, effective_start_time,
+                        identifier, alert_category, feature_type, geometry, severity, effective_start_time,
                         effective_end_time, disaster_type, area_description, severity_level,
                         type, actual_lang, warning_message, disseminated, severity_color,
                         alert_id_sdma_autoinc, centroid, alert_source, area_covered,
                         sender_org_id, polygon_area_covered, min_lat, max_lat, min_long, max_long,
                         depth, intensity, color, latitude, longitude, radius, zone_name, properties
                     ) VALUES (
-                        %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
+                        %s, %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (identifier) DO UPDATE SET
+                        alert_category = EXCLUDED.alert_category,
                         feature_type = EXCLUDED.feature_type,
                         geometry = EXCLUDED.geometry,
                         severity = EXCLUDED.severity,
@@ -189,6 +197,7 @@ def insert_features(conn, geojson_data):
                         properties = EXCLUDED.properties
                 """, (
                     props.get("identifier"),
+                    props.get("alert_category"),
                     props.get("feature_type"),
                     geom_json,
                     props.get("severity"),
@@ -305,7 +314,19 @@ def store_alerts_to_neondb(geojson_data=None, geojson_path="cap_alerts.geojson",
         if setup_schema:
             print("📋 Setting up database schema...")
             setup_database(conn)
-        
+        else:
+            # Always ensure new columns exist even without a full schema reset
+            with conn.cursor() as cur:
+                cur.execute("""
+                    ALTER TABLE cap_alerts
+                        ADD COLUMN IF NOT EXISTS alert_category VARCHAR(100);
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_cap_alerts_alert_category
+                        ON cap_alerts (alert_category);
+                """)
+                conn.commit()
+
         # Insert features
         print("📥 Storing alerts to NeonDB...")
         features = geojson_data.get("features", [])
@@ -333,21 +354,22 @@ def store_alerts_to_neondb(geojson_data=None, geojson_path="cap_alerts.geojson",
                 try:
                     cur.execute("""
                         INSERT INTO cap_alerts (
-                            identifier, feature_type, geometry, severity, effective_start_time,
+                            identifier, alert_category, feature_type, geometry, severity, effective_start_time,
                             effective_end_time, disaster_type, area_description, severity_level,
                             type, actual_lang, warning_message, disseminated, severity_color,
                             alert_id_sdma_autoinc, centroid, alert_source, area_covered,
                             sender_org_id, polygon_area_covered, min_lat, max_lat, min_long, max_long,
                             depth, intensity, color, latitude, longitude, radius, zone_name, properties
                         ) VALUES (
-                            %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
+                            %s, %s, %s, ST_GeomFromGeoJSON(%s), %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s,
                             %s, %s, %s, %s, %s, %s,
-                            %s, %s, %s, %s, %s, %s, %s, %s
+                            %s, %s, %s, %s, %s, %s, %s
                         )
                         ON CONFLICT (identifier) DO UPDATE SET
+                            alert_category = EXCLUDED.alert_category,
                             feature_type = EXCLUDED.feature_type,
                             geometry = EXCLUDED.geometry,
                             severity = EXCLUDED.severity,
@@ -381,6 +403,7 @@ def store_alerts_to_neondb(geojson_data=None, geojson_path="cap_alerts.geojson",
                             properties = EXCLUDED.properties
                     """, (
                         props.get("identifier"),
+                        props.get("alert_category"),
                         props.get("feature_type"),
                         geom_json,
                         props.get("severity"),
